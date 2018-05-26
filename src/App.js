@@ -1,76 +1,126 @@
 import React, { Component } from 'react';
 import logo from './logo.svg';
 import './App.css';
+import moment from 'moment';
 import { Line } from 'react-chartjs';
 import Dropdown from 'react-dropdown'
 import 'react-dropdown/style.css'
+import _ from 'lodash';
 const options = [
-  'USD', 'EUR', 'HNL'
+  "GBP", "AUD", "BRL", "CAD", "HNL", "DKK", "GBP", "EUR", "USD"
 ];
-var data = {
-  labels: ["January", "February", "March", "April", "May", "June", "July"],
-  datasets: [
-    {
-      label: "My First dataset",
-      fillColor: "rgba(220,220,220,0.2)",
-      strokeColor: "rgba(220,220,220,1)",
-      pointColor: "rgba(220,220,220,1)",
-      pointStrokeColor: "#fff",
-      pointHighlightFill: "#fff",
-      pointHighlightStroke: "rgba(220,220,220,1)",
-      data: [65, 59, 80, 81, 56, 55, 40]
-    }
-  ]
-};
+const dayOptions = [
+  "1 Week", "1 Month", "3 Month"
+]
+
 class App extends Component {
   constructor() {
     super();
     this.state = {
       currency: {},
-      defaultOption: options[0],
       base: 0,
       versus: 0,
-      baseCurrency: options[0],
-      versusCurrency: options[0],
+      baseCurrency: options[4],
+      versusCurrency: options[2],
       rateBV: 1,
       rateVB: 1,
+      data: {},
+      end: moment().format('YYYY-MM-DD'),
+      start: moment().subtract(1, 'M').format('YYYY-MM-DD'),
+      graphicOption: "Select"
     };
     this.handleBaseCurrencyChange = this.handleBaseCurrencyChange.bind(this);
     this.handleVersusCurrencyChange = this.handleVersusCurrencyChange.bind(this);
     this.handleBaseInputChange = this.handleBaseInputChange.bind(this);
     this.handleVersusInputChange = this.handleVersusInputChange.bind(this);
+    this.reloadGraphic = this.reloadGraphic.bind(this);
+    this.handleGraphicChanges = this.handleGraphicChanges.bind(this);
+  }
+  componentDidMount() {
+    const { end, start } = this.state;
+    this.reloadGraphic(end, start);
+  }
+  
+  reloadGraphic(end, start) {
+    const { baseCurrency, versusCurrency } = this.state;
+    const url = `https://currencyupdate.azurewebsites.net/historical/${baseCurrency}-${versusCurrency}?start=${start}&end=${end}`;
+
+    fetch(url, {
+      Accept: 'application/json'
+    }).then(res => res.json())
+      .then(data => this.setState({
+        data: this.getDataGraphic(moment(data.end), moment(data.start), data.rate)
+      }))
+  }
+  handleGraphicChanges(options) {
+    const value = options.value;
+    this.setState({ graphicOption: value })
+    let end = moment().format('YYYY-MM-DD');
+    let start = '';
+    if (value === '1 Week') {
+      start = moment().subtract(7, 'd').format('YYYY-MM-DD');
+    } else if (value === '1 Month') {
+      start = moment().subtract(1, 'M').format('YYYY-MM-DD');
+    } else {
+      start = moment().subtract(3, 'M').format('YYYY-MM-DD');
+    }
+    this.setState({ start })
+    this.reloadGraphic(end, start);
   }
 
-  componentWillMount() {
-    fetch('https://www.reddit.com/.json', {
-      Accept: 'application/json'
+  getDataGraphic(dateEnd, dateStart, rates) {
+    var timeValues = [];
+    while (dateEnd > dateStart || dateStart.format('M') === dateEnd.format('M')) {
+      timeValues.push(dateStart.format('YYYY-MM'));
+      dateStart.add(1, 'month');
+    }
+    let allRates = _.toArray(rates);
+    let monthWithRate = {};
+    timeValues.forEach(function (month) {
+      monthWithRate[month] = [];
+      Object.keys(rates).forEach(function (date, index) {
+        if (month === moment(date).format('YYYY-MM')) {
+          monthWithRate[month].push(allRates[index])
+        }
+      })
+    });
+    let response = {
+      labels: timeValues,
+      datasets: [],
+    };
+    Object.keys(monthWithRate).forEach(function (date, index) {
+      response.datasets.push({ data: monthWithRate[date],fillColor: "rgba(220,220,220,0.2)",
+      strokeColor: "rgba(220,220,220,1)",
+      pointColor: "rgba(220,220,220,1)" ,
+      label: date});
     })
-    .then(res => res.json())
-    .then(data => this.setState({ currency: data }));
+
+    return response;
   }
 
   handleBaseCurrencyChange(option) {
     const value = option.value;
-    this.setState({baseCurrency: value})
+    this.setState({ baseCurrency: value })
     const { versusCurrency, base } = this.state;
 
     fetch(`https://currencyupdate.azurewebsites.net/latest/${value}-${versusCurrency}`, {
       Accept: 'application/json'
     })
-    .then(res => res.json())
-    .then(data => this.setState({ versus: base * data.rate, rateVB: data.rate }));
+      .then(res => res.json())
+      .then(data => this.setState({ versus: base * data.rate, rateVB: data.rate }))
+      .then(() => this.reloadGraphic(this.state.end, this.state.start));
   }
 
   handleVersusCurrencyChange(option) {
     const value = option.value;
-    this.setState({versusCurrency: value})
+    this.setState({ versusCurrency: value })
     const { baseCurrency, base } = this.state;
-
     fetch(`https://currencyupdate.azurewebsites.net/latest/${baseCurrency}-${value}`, {
       Accept: 'application/json'
     })
-    .then(res => res.json())
-    .then(data => this.setState({ versus: base * data.rate, rateBV: data.rate }));
+      .then(res => res.json())
+      .then(data => this.setState({ versus: base * data.rate, rateBV: data.rate }))
+      .then(() => this.reloadGraphic(this.state.end, this.state.start));
   }
 
   handleBaseInputChange(e) {
@@ -86,17 +136,13 @@ class App extends Component {
   }
 
   render() {
-    const { currency, defaultOption, baseCurrency, versusCurrency } = this.state;
+    const { graphicOption, baseCurrency, versusCurrency } = this.state;
     return (
       <div className="App">
         <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <h1 className="App-title">Loyica</h1>
+          <h1 className="App-title">Or - Be</h1>
         </header>
-        <Line data={data} width="600" height="250" />
-        <p className="App-intro">
-          To get started, edit <code>src/App.js</code> and save to reload.
-        </p>
+        <Line data={this.state.data} width="600" height="250" redraw />
         <div className="container">
           <div className="row">
             <div className="col-5">
@@ -131,6 +177,21 @@ class App extends Component {
                   options={options}
                   onChange={this.handleVersusCurrencyChange}
                   value={versusCurrency}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="container">
+          <div className="row">
+            <div className="col-5">
+              <div className="row">
+                <Dropdown className="dropdown-menu"
+                  className="col-6"
+                  value={graphicOption}
+                  onChange={this.handleGraphicChanges}
+                  options={dayOptions}
+
                 />
               </div>
             </div>

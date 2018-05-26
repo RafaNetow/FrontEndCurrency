@@ -5,6 +5,8 @@
   "dependencies": {
     "chart.js": "^1.1.1",
     "clear": "^0.1.0",
+    "lodash": "^4.17.10",
+    "moment": "^2.22.1",
     "react": "^16.4.0",
     "react-chartjs": "^1.2.0",
     "react-dom": "^16.4.0",
